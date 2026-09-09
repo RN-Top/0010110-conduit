@@ -13,7 +13,7 @@ from pathlib import Path
 import streamlit as st
 
 SEQUENCE = "0010110"
-VALUE = int(SEQUENCE, 2)  # 22
+VALUE = int(SEQUENCE, 2)
 DEFAULT_BITS = [0, 0, 1, 0, 1, 1, 0]
 
 BIT_LABELS = [
@@ -36,7 +36,6 @@ def supabase_client():
         from supabase import create_client
     except Exception:
         return None
-
     url = os.environ.get("SUPABASE_URL", "")
     key = os.environ.get("SUPABASE_KEY", "")
     try:
@@ -45,7 +44,6 @@ def supabase_client():
             key = st.secrets.get("SUPABASE_KEY", "")
     except Exception:
         pass
-
     if url and key:
         try:
             return create_client(url, key)
@@ -239,7 +237,6 @@ with tab_receive:
     st.caption("Workings sealed by anyone on this conduit appear here.")
     if st.button("Refresh pool"):
         st.rerun()
-
     pool = load_pool()
     if not pool:
         st.info("The pool is empty. Cast the first working.")
