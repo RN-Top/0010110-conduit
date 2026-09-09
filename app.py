@@ -1,5 +1,5 @@
 """Conduit — 0010110
-Streamlit ritual app. One person casts a working. Another receives it.
+A two-person ritual app. One casts a working. The other receives it.
 """
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ def supabase_client():
         from supabase import create_client
     except Exception:
         return None
+
     url = os.environ.get("SUPABASE_URL", "")
     key = os.environ.get("SUPABASE_KEY", "")
     try:
@@ -44,6 +45,7 @@ def supabase_client():
             key = st.secrets.get("SUPABASE_KEY", "")
     except Exception:
         pass
+
     if url and key:
         try:
             return create_client(url, key)
@@ -53,6 +55,10 @@ def supabase_client():
 
 
 SB = supabase_client()
+
+
+def bits_to_code(bits):
+    return "".join(str(int(b)) for b in bits)
 
 
 def load_local():
@@ -107,10 +113,6 @@ def make_hash(rec):
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
 
 
-def bits_to_code(bits):
-    return "".join(str(int(b)) for b in bits)
-
-
 st.set_page_config(
     page_title="Conduit — 0010110",
     page_icon="◈",
@@ -121,21 +123,21 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-      .block-container { padding-top: 1.1rem; max-width: 820px; }
+      .block-container { padding-top: 1.05rem; max-width: 820px; }
       .sigil {
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-size: clamp(2.2rem, 8vw, 3.6rem);
+        font-size: clamp(2.1rem, 8vw, 3.5rem);
         letter-spacing: 0.28em;
         text-align: center;
         color: #e8c878;
         text-shadow: 0 0 18px rgba(184,134,11,0.45);
-        margin: 0.2rem 0 0.15rem;
+        margin: 0.15rem 0 0.1rem;
       }
       .sub {
         text-align: center;
         color: #9a8b6a;
         font-size: 0.92rem;
-        margin-bottom: 0.8rem;
+        margin-bottom: 0.7rem;
       }
     </style>
     """,
@@ -154,6 +156,25 @@ st.markdown(
 )
 st.caption("live pool connected" if SB is not None else "local Streamlit mode")
 
+with st.expander("What is this? How do I use it?", expanded=False):
+    st.markdown(
+        """
+**Conduit** is a two-person ritual around the sequence **0010110** (value 22).
+One person **casts**. The other **receives**.
+
+1. Open **Cast**. Put your name in *Your name / sigil*.
+2. Write an intention — what you send across the bridge.
+3. Leave the seven bits on `0010110`, or flip them if that is the working.
+4. Tap **Iterate +1** for each pass of attention.
+5. Tap **Seal & send**. You get a short hash. That is the seal.
+6. The other person opens **Receive** and taps **Refresh pool**.
+7. **Grimoire** keeps only the workings under your name.
+
+This is an attention tool, not a claim of telepathy.
+The sequence is the bridge. The app is the conduit.
+        """
+    )
+
 tab_cast, tab_receive, tab_grimoire = st.tabs(["Cast", "Receive", "Grimoire"])
 
 with tab_cast:
@@ -164,7 +185,7 @@ with tab_cast:
     )
     intention = st.text_area(
         "Intention — what do you send across the bridge?",
-        height=100,
+        height=110,
         placeholder="Speak it plainly. The sequence carries it.",
     )
 
@@ -218,13 +239,14 @@ with tab_receive:
     st.caption("Workings sealed by anyone on this conduit appear here.")
     if st.button("Refresh pool"):
         st.rerun()
+
     pool = load_pool()
     if not pool:
         st.info("The pool is empty. Cast the first working.")
     else:
         for w in reversed(pool):
             bits = w.get("bits", [])
-            shown = w.get("code") or bits_to_code(bits) if bits else "?"
+            shown = w.get("code") or (bits_to_code(bits) if bits else "?")
             with st.container(border=True):
                 st.markdown(f"**{w.get('caster', '?')}** · `{w.get('hash', '')}`")
                 st.write(w.get("intention", ""))
