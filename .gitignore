@@ -1,7 +1,6 @@
 .venv/
 venv/
 __pycache__/
-*.py[cod]
-.streamlit/secrets.toml
+*.py .streamlit/secrets.toml
 data/archive.json
 .DS_Store
