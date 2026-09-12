@@ -1,5 +1,6 @@
 """Conduit — 0010110
-A two-person ritual app. One casts a working. The other receives it.
+A shared ritual pot. Anyone casts an intent. Anyone draws from it.
+Supports pool or targeted sends, tags, and image uploads.
 """
 
 from __future__ import annotations
@@ -23,8 +24,7 @@ BIT_LABELS = [
     ("Word", "a name is spoken"),
     ("Other", "the second mind opens"),
     ("Record", "the moment is sealed"),
-    ("Release", "the working is sent"),
-]
+    ("Release", "the working is sent"), "grief", "love", "money", "clarity", "healing", "protection", "other"]
 
 ROOT = Path(__file__).resolve().parent
 ARCHIVE_PATH = ROOT / "data" / "archive.json"
@@ -63,10 +63,7 @@ def load_local():
     if ARCHIVE_PATH.exists():
         try:
             data = json.loads(ARCHIVE_PATH.read_text(encoding="utf-8"))
-            return data if isinstance(data, list) else []
-        except json.JSONDecodeError:
-            return []
-    return []
+            return data if isinstance(data, list) else [  ]
 
 
 def save_local(rows):
@@ -95,6 +92,19 @@ def push_working(rec):
     save_local(rows)
 
 
+def upload_image(file):
+    if file is None:
+        return None
+    if SB is None:
+        return None
+    try:
+        path = f"intents/{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{file.name}"
+        SB.storage.from_("images").upload(path, file.getvalue())
+        return SB.storage.from_("images").get_public_url(path)
+    except Exception:
+        return None
+
+
 def make_hash(rec):
     payload = json.dumps(
         {
@@ -104,6 +114,8 @@ def make_hash(rec):
             "value": rec.get("value"),
             "iterations": rec.get("iterations"),
             "created_at": rec.get("created_at"),
+            "tag": rec.get("tag"),
+            "target": rec.get("target"),
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -157,23 +169,24 @@ st.caption("live pool connected" if SB is not None else "local Streamlit mode")
 with st.expander("What is this? How do I use it?", expanded=False):
     st.markdown(
         """
-**Conduit** is a two-person ritual around the sequence **0010110** (value 22).
-One person **casts**. The other **receives**.
+**Conduit** is a shared ritual pot around the sequence **0010110** (value 22).
+Anyone **casts**. Anyone **receives**.
 
 1. Open **Cast**. Put your name in *Your name / sigil*.
 2. Write an intention — what you send across the bridge.
-3. Leave the seven bits on `0010110`, or flip them if that is the working.
-4. Tap **Iterate +1** for each pass of attention.
-5. Tap **Seal & send**. You get a short hash. That is the seal.
-6. The other person opens **Receive** and taps **Refresh pool**.
-7. **Grimoire** keeps only the workings under your name.
+3. Pick a tag, optionally upload an image, and choose pool or targeted send.
+4. Leave the seven bits on `0010110`, or flip them if that is the working.
+5. Tap **Iterate +1** for each pass of attention.
+6. Tap **Seal & send**. You get a short hash. That is the seal.
+7. Open **Receive** and tap **Refresh pool**.
+8. **Grimoire** keeps only the workings under your name.
 
 This is an attention tool, not a claim of telepathy.
 The sequence is the bridge. The app is the conduit.
         """
     )
 
-tab_cast, tab_receive, tab_grimoire = st.tabs(["Cast", "Receive", "Grimoire"])
+tab_cast, tab_receive, tab_grimoire = st.tabs( )
 
 with tab_cast:
     st.subheader("Cast a working")
@@ -187,19 +200,25 @@ with tab_cast:
         placeholder="Speak it plainly. The sequence carries it.",
     )
 
+    tag = st.selectbox("Tag", TAGS, index=len(TAGS) - 1)
+    img = st.file_uploader("Attach an image or drawing (optional)", type=["png", "jpg", "jpeg", "webp" "Shared pool (anyone can see)", "Specific person"], horizontal=True)
+    target = ""
+    if send_mode.startswith("Specific"):
+        target = st.text_input("Target name / sigil")
+
     st.markdown("**Align the seven bits**")
     cols = st.columns(7)
     state = []
     for i, col in enumerate(cols):
         with col:
             on = st.toggle(
-                BIT_LABELS[i][0],
-                value=bool(DEFAULT_BITS[i]),
+                BIT_LABELS [0],
+                value=bool(DEFAULT_BITS ),
                 key=f"bit_{i}",
-                help=BIT_LABELS[i][1],
+                help=BIT_LABELS [1],
             )
             state.append(1 if on else 0)
-            st.caption(BIT_LABELS[i][1])
+            st.caption(BIT_LABELS [1])
 
     code = bits_to_code(state)
     cur = int(code, 2)
@@ -216,7 +235,10 @@ with tab_cast:
     if st.button("Seal & send", type="primary", use_container_width=True):
         if not (intention or "").strip():
             st.warning("Speak an intention before you seal it.")
+        elif send_mode.startswith("Specific") and not (target or "").strip():
+            st.warning("Name the person you're sending to.")
         else:
+            img_url = upload_image(img)
             rec = {
                 "caster": (st.session_state.caster or "unknown").strip(),
                 "intention": intention.strip(),
@@ -224,16 +246,19 @@ with tab_cast:
                 "code": code,
                 "value": cur,
                 "iterations": int(st.session_state.iters),
+                "tag": tag,
+                "target": (target or "").strip() or None,
+                "image_url": img_url,
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
-            rec["hash"] = make_hash(rec)
+            rec = make_hash(rec)
             push_working(rec)
             st.session_state.iters = 0
-            st.success(f"Sealed — `{rec['hash']}`")
+            st.success(f"Sealed — `{rec }`")
             st.balloons()
 
 with tab_receive:
-    st.subheader("The shared pool")
+    st.subheader("The shared pot")
     st.caption("Workings sealed by anyone on this conduit appear here.")
     if st.button("Refresh pool"):
         st.rerun()
@@ -242,11 +267,15 @@ with tab_receive:
         st.info("The pool is empty. Cast the first working.")
     else:
         for w in reversed(pool):
+            if w.get("target"):
+                continue
             bits = w.get("bits", [])
             shown = w.get("code") or (bits_to_code(bits) if bits else "?")
             with st.container(border=True):
-                st.markdown(f"**{w.get('caster', '?')}** · `{w.get('hash', '')}`")
+                st.markdown(f"**{w.get('caster', 'unknown')}** · `{w.get('tag', 'other')}`")
                 st.write(w.get("intention", ""))
+                if w.get("image_url"):
+                    st.image(w , width=280)
                 st.code(f"{shown}  =  {w.get('value', '?')}")
                 st.caption(
                     f"{w.get('iterations', 0)} iterations · {w.get('created_at', '')}"
